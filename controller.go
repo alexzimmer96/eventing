@@ -14,12 +14,14 @@ type StorageProvider interface {
 	GetSortedEventsForEntityID(ctx context.Context, entityID string) ([]Event, error)
 }
 
+// Controllers are the primary way to save events and build projections based upon these.
 type Controller struct {
 	provider        StorageProvider
 	projection      Projection
 	buildProjection BuildProjectionFunc
 }
 
+// NewController creates a new instance of an controller by collection all necessary data.
 func NewController(projection Projection, buildProjection BuildProjectionFunc, provider StorageProvider) *Controller {
 	return &Controller{
 		provider:        provider,
@@ -28,33 +30,16 @@ func NewController(projection Projection, buildProjection BuildProjectionFunc, p
 	}
 }
 
+// GetLatestProjection retrieves the latest projection the managed projection-entity.
 func (controller *Controller) GetLatestProjection(ctx context.Context, entityID string) (Projection, error) {
 	latestProjection, err := controller.provider.GetProjection(ctx, entityID, controller.projection)
 	if err != nil {
 		return nil, err
 	}
-	if latestProjection == nil {
-		return nil, nil
-	}
-	latestEventID, err := controller.provider.GetLatestEventIDForEntityID(ctx, entityID)
-	if err != nil {
-		return nil, err
-	}
-	if latestProjection.GetLastEventID() != latestEventID {
-		events, err := controller.provider.GetSortedEventsForEntityID(ctx, entityID)
-		if err != nil {
-			return nil, err
-		}
-		newProjection, err := controller.buildProjection(ctx, events)
-		err = controller.provider.SaveProjection(ctx, newProjection)
-		if err != nil {
-			return nil, err
-		}
-		return newProjection, nil
-	}
 	return latestProjection, nil
 }
 
+// SaveEvent stores an event and builds an up-to-date projection.
 func (controller *Controller) SaveEvent(ctx context.Context, event Event) error {
 	if err := controller.provider.SaveEvent(ctx, event); err != nil {
 		return err
